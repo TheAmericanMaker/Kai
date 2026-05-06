@@ -4,42 +4,47 @@ pipeline: workflow/pipeline.yaml
 # ^^^ Switched from the default deep-audit (7-phase) to the 5-phase pipeline.yaml so the
 # architecture and contracts phases can run back-to-back without an intervening
 # defect-scan-mechanical phase. Other phases removed accordingly (no defect-scan-*).
-current_phase: architecture  # Set to "complete" when all phases are done.
+current_phase: contracts  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
-# Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
-#   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
-#   carry_forward: items deferred to a specific later phase whose rubric is the right place to close them.
-# Each entry is a mapping with keys: id, kind, description, deferred_reason
-# carry_forward entries additionally carry: target_phase
-# Allowed kinds: needs-runtime-test, needs-maintainer-decision, needs-spec-ruling,
-#                defer-to-phase, needs-fixture-capture
 phases:
   architecture:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []   # genuinely unknown items
-    carry_forward:       # focus subsystems pre-seeded by orchestrator; resolved/extended in the architecture phase
+    status: complete
+    owner_notes:
+      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web — plus the iOS Xcode shell). 3 Gradle modules (`:composeApp`, `:androidApp`, `:screenshotTests`) and one out-of-tree iOS shell (`iosApp/`).
+      - Two surprise findings worth pinning in contracts — SAF binds are delegated to the FileKit library (no direct SAF code), and the project deliberately does NOT request battery whitelist (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` absent), relying on `START_STICKY` + `MainActivity.onStart()` re-assertion to mitigate OEM kills.
+      - Linux sandbox is Android-only by design; every other target ships `NoOpSandboxController`. The native proot+talloc binaries are cross-compiled by `build-proot.sh` from termux/proot @ pinned commit, output to `androidApp/src/main/jniLibs/`.
+    outputs_present:
+      - findings/architecture/architecture-map.md
+    open_questions:
+      - id: arch-OQ1
+        kind: needs-runtime-test
+        description: Does `LinuxSandboxManager.makeWritable()` recurse symlinks? Source comment says "walkTopDown"; would need a runtime test on a rootfs with a symlink-to-directory to confirm.
+        deferred_reason: Not load-bearing for the architecture map; relevant to defect-scan if that pipeline runs later.
+      - id: arch-OQ2
+        kind: needs-maintainer-decision
+        description: The `:screenshotTests` module's local-vs-CI runnability is unclear from the Gradle config alone.
+        deferred_reason: Not load-bearing for porting; relevant only if a port wants to mirror the test surface.
+    carry_forward:
       - id: kai-CF-alpine-proot
         kind: defer-to-phase
         target_phase: contracts
-        description: Focus subsystem — Alpine/proot bootstrap (the on-device Linux sandbox). Architecture phase locates and maps the code; contracts phase pins the user-visible setup contract, failure surface, and recovery semantics.
-        deferred_reason: User-facing setup behavior (success/failure surface, retry semantics, recoverable vs unrecoverable errors) is the contracts phase's rubric.
+        description: Alpine/proot user-visible setup contract — pin success/failure surface, retry semantics, recoverable vs unrecoverable error during setup, and the contract for chooses-no-internet vs all-mirrors-fail.
+        deferred_reason: User-facing setup behavior is the contracts phase's rubric.
       - id: kai-CF-foreground-service
         kind: defer-to-phase
         target_phase: contracts
-        description: Focus subsystem — Android foreground service / autonomous-heartbeat daemon. Architecture phase locates and characterises lifecycle; contracts phase pins notification visibility, restart behavior, and OS-kill recovery contract.
-        deferred_reason: Foreground-service lifecycle is observable user-facing behavior owned by the contracts phase.
+        description: Daemon foreground service — pin notification visibility (the persistent low-importance "Kai daemon running" notification), OS-kill recovery contract (START_STICKY semantics + MainActivity.onStart re-assertion), behavior under Android 14+ FGS time limits (`onTimeout` clean-stop), behavior when `ForegroundServiceStartNotAllowedException` fires (silent swallow).
+        deferred_reason: Lifecycle contract is observable user-facing behavior.
       - id: kai-CF-saf-binds
         kind: defer-to-phase
         target_phase: contracts
-        description: Focus subsystem — SAF (Storage Access Framework) binds for file access on Android. Architecture phase identifies the surface area (FileKit pickers, FileProvider for sandbox file open-out); contracts phase pins permission flow and persistable-URI guarantees (or notes their absence).
-        deferred_reason: Permission flow, persisted-URI guarantees, and failure semantics are user-visible contracts.
+        description: SAF binds — pin (a) the FileKit-mediated picker contract on Android (delegated, not direct SAF), (b) the FileProvider outbound-sharing contract for sandbox files via `Intent.ACTION_VIEW`, (c) the deliberate **absence** of persistent SAF grants (no `takePersistableUriPermission` cache).
+        deferred_reason: Permission-flow + persistability semantics are user-visible contracts.
       - id: kai-CF-battery-whitelist
         kind: defer-to-phase
         target_phase: contracts
-        description: Focus subsystem — Battery whitelist / Doze / power-management. Architecture phase determines whether Kai requests REQUEST_IGNORE_BATTERY_OPTIMIZATIONS (it does not, per a survey of androidMain/) and how it mitigates OEM kills; contracts phase pins the user-visible behavior under Doze / aggressive OEM battery managers.
-        deferred_reason: Request flow and fallback behavior when the user denies the request (or when no request is made) are user-visible contracts.
+        description: Battery whitelist — pin the **deliberate non-request** decision and the resulting user-visible behavior under stock Doze (mostly survives) and aggressive OEM power management (MIUI/EMUI/Huawei may kill the FGS, recovered via re-assertion next foreground). No `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is requested.
+        deferred_reason: The "no request" decision plus the FGS-layer mitigation is itself the user-visible contract — the contracts phase pins what the user observes and how heartbeat misses surface.
   contracts:
     status: pending
     owner_notes: []
@@ -65,5 +70,5 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Begin architecture phase by reading the repository and producing findings/architecture/architecture-map.md.
-  - Map each focus subsystem listed in carry_forward (Alpine/proot, foreground service, SAF, battery whitelist) so the contracts phase can pin user-visible behavior in dedicated subsections of behavioral-contracts.md.
+  - Run the contracts phase per pipeline.yaml. Required reads — GUIDE.md, this status.yaml, findings/architecture/architecture-map.md. Output — findings/contracts/behavioral-contracts.md.
+  - Each of the 4 focus carry_forward entries (kai-CF-alpine-proot, kai-CF-foreground-service, kai-CF-saf-binds, kai-CF-battery-whitelist) must appear as a clearly-labelled subsection of behavioral-contracts.md, with the standard contract fields (trigger / defaults / outputs / side effects / persisted state / error behavior / recovery behavior).
