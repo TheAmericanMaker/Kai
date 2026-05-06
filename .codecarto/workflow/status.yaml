@@ -1,0 +1,69 @@
+project_name: "Kai"
+# source_location is defined in the active pipeline YAML. Do not duplicate it here.
+pipeline: workflow/pipeline.yaml
+# ^^^ Switched from the default deep-audit (7-phase) to the 5-phase pipeline.yaml so the
+# architecture and contracts phases can run back-to-back without an intervening
+# defect-scan-mechanical phase. Other phases removed accordingly (no defect-scan-*).
+current_phase: architecture  # Set to "complete" when all phases are done.
+last_updated: "2026-05-06"
+# Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
+#   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
+#   carry_forward: items deferred to a specific later phase whose rubric is the right place to close them.
+# Each entry is a mapping with keys: id, kind, description, deferred_reason
+# carry_forward entries additionally carry: target_phase
+# Allowed kinds: needs-runtime-test, needs-maintainer-decision, needs-spec-ruling,
+#                defer-to-phase, needs-fixture-capture
+phases:
+  architecture:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []   # genuinely unknown items
+    carry_forward:       # focus subsystems pre-seeded by orchestrator; resolved/extended in the architecture phase
+      - id: kai-CF-alpine-proot
+        kind: defer-to-phase
+        target_phase: contracts
+        description: Focus subsystem — Alpine/proot bootstrap (the on-device Linux sandbox). Architecture phase locates and maps the code; contracts phase pins the user-visible setup contract, failure surface, and recovery semantics.
+        deferred_reason: User-facing setup behavior (success/failure surface, retry semantics, recoverable vs unrecoverable errors) is the contracts phase's rubric.
+      - id: kai-CF-foreground-service
+        kind: defer-to-phase
+        target_phase: contracts
+        description: Focus subsystem — Android foreground service / autonomous-heartbeat daemon. Architecture phase locates and characterises lifecycle; contracts phase pins notification visibility, restart behavior, and OS-kill recovery contract.
+        deferred_reason: Foreground-service lifecycle is observable user-facing behavior owned by the contracts phase.
+      - id: kai-CF-saf-binds
+        kind: defer-to-phase
+        target_phase: contracts
+        description: Focus subsystem — SAF (Storage Access Framework) binds for file access on Android. Architecture phase identifies the surface area (FileKit pickers, FileProvider for sandbox file open-out); contracts phase pins permission flow and persistable-URI guarantees (or notes their absence).
+        deferred_reason: Permission flow, persisted-URI guarantees, and failure semantics are user-visible contracts.
+      - id: kai-CF-battery-whitelist
+        kind: defer-to-phase
+        target_phase: contracts
+        description: Focus subsystem — Battery whitelist / Doze / power-management. Architecture phase determines whether Kai requests REQUEST_IGNORE_BATTERY_OPTIMIZATIONS (it does not, per a survey of androidMain/) and how it mitigates OEM kills; contracts phase pins the user-visible behavior under Doze / aggressive OEM battery managers.
+        deferred_reason: Request flow and fallback behavior when the user denies the request (or when no request is made) are user-visible contracts.
+  contracts:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
+  protocols:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
+  porting:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
+  reimplementation-spec:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
+next_actions:
+  - Begin architecture phase by reading the repository and producing findings/architecture/architecture-map.md.
+  - Map each focus subsystem listed in carry_forward (Alpine/proot, foreground service, SAF, battery whitelist) so the contracts phase can pin user-visible behavior in dedicated subsections of behavioral-contracts.md.
