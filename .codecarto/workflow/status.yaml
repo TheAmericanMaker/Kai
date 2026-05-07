@@ -1,6 +1,6 @@
 project_name: "Kai"
 pipeline: workflow/pipeline-full-with-deep-audit.yaml
-current_phase: reimplementation-spec
+current_phase: complete
 last_updated: "2026-05-06"
 phases:
   architecture: {status: complete, outputs_present: [findings/architecture/architecture-map.md], open_questions: [], carry_forward: []}
@@ -8,25 +8,21 @@ phases:
   contracts: {status: complete, outputs_present: [findings/contracts/behavioral-contracts.md], open_questions: [], carry_forward: []}
   protocols: {status: complete, outputs_present: [findings/protocols/protocols-and-state.md], open_questions: [], carry_forward: []}
   defect-scan-semantic: {status: complete, outputs_present: [findings/defect-scan-semantic/semantic-defects.md], open_questions: [], carry_forward: []}
-  porting:
+  porting: {status: complete, outputs_present: [findings/porting/reverse-engineering-bundle.md], open_questions: [], carry_forward: []}
+  reimplementation-spec:
     status: complete
     owner_notes:
-      - Synthesised architecture/contracts/protocols + 16 mechanical defects + 18 semantic defects = 34 total. Triaged into 8 fix-before-porting (all 4 HIGH-security + 4 mediums) / 13 port-differently / 10 leave-behind.
-      - Routed two carry_forward items to reimplementation-spec— (a) port-CF1 the four HIGH-security cluster needs explicit spec treatment; (b) port-CF2 the Android-only-sandbox asymmetry needs re-affirm-or-redesign decision.
-      - Closed proto-CF3 (no `_schema_version` in settings export) by surfacing it as a porting recommendation.
-    outputs_present: [findings/porting/reverse-engineering-bundle.md]
+      - Language-agnostic spec produced (orchestrator chose at strategic-alignment hook). 12 conceptual modules defined; v0/v1/v2 scope tiers; 22 acceptance scenarios; 5 spike-list items.
+      - All four HIGH-security findings (port-CF1) baked into the v0 baseline as MUST requirements.
+      - port-CF2 (Android-only-sandbox asymmetry) addressed in External Dependencies (sandbox primitive— "re-design per platform; iOS/web declared non-goal") and Deliberate Non-Goals.
+    outputs_present: [findings/reimplementation-spec/reimplementation-spec.md]
     open_questions:
-      - {id: port-OQ1, kind: needs-runtime-test, description: "Heartbeat-with-on-device-only-LLM doesn't leak notification content?", deferred_reason: "Runtime test needed."}
-      - {id: port-OQ2, kind: needs-source-extraction, description: "Conversation-record on-disk format.", deferred_reason: "Not extracted."}
-      - {id: port-OQ3, kind: needs-maintainer-decision, description: "Is porting also a UX migration around the security cluster?", deferred_reason: "Strategic-alignment hook for reimpl-spec."}
+      - {id: spec-OQ1, kind: needs-runtime-test, description: "On-device LLM inference latency for heartbeat", deferred_reason: "Spike before v1."}
+      - {id: spec-OQ2, kind: needs-spec-ruling, description: "Conversation-record on-disk format", deferred_reason: "Spike before chat-storage v0."}
+      - {id: spec-OQ3, kind: needs-runtime-test, description: "Mirror-list user-extension malicious-mirror risk", deferred_reason: "UX spike."}
+      - {id: spec-OQ4, kind: needs-maintainer-decision, description: "Whether v2 ships notification listener at all", deferred_reason: "Decide at v1 close."}
     carry_forward:
-      - {id: port-CF1, kind: defer-to-phase, target_phase: reimplementation-spec, description: "Four-HIGH security cluster (4.1/4.2/4.3/4.4) needs explicit spec treatment.", deferred_reason: "Strategic-alignment decision."}
-      - {id: port-CF2, kind: defer-to-phase, target_phase: reimplementation-spec, description: "Android-only-sandbox asymmetry— re-affirm or redesign.", deferred_reason: "Spec-level decision."}
-  reimplementation-spec:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
-    carry_forward: []
+      - {id: spec-CF1, kind: defer-to-phase, target_phase: spike, description: "On-device LLM latency benchmark.", deferred_reason: "Pre-v1 spike."}
+      - {id: spec-CF2, kind: defer-to-phase, target_phase: spike, description: "Conversation-record on-disk format spike.", deferred_reason: "Pre-chat-storage-v0."}
 next_actions:
-  - Reimplementation-spec phase. Honor the Strategic Alignment Hook in GUIDE.md— ASK USER opinionated vs language-agnostic before producing the spec. Pick up port-CF1, port-CF2.
+  - Pipeline complete. Optional next steps— (a) post-pipeline spec-delta-application after spikes; (b) hand off the reverse-engineering bundle and the spec to a porting team; (c) propose CONVENTIONS.md / DECISIONS.md if a port project starts.
