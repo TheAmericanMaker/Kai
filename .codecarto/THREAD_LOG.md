@@ -31,3 +31,4 @@ grep -E '^- [0-9]{4}-[0-9]{2}-[0-9]{2}' .codecarto/THREAD_LOG.md | sort | uniq -
 
 - 2026-05-02 — framework-feedback-pass — applied 6 spec-blockers + 5 clarifications from FEEDBACK_INDEX.md; 14 deferred to BACKLOG.md — [closeout](closeouts/2026-05-02-framework-feedback-pass.md)
 - 2026-05-06 — architecture — mapped Kai's KMP/CMP layout across 5 targets; covered 4 focus subsystems (Alpine/proot, FGS, SAF-via-FileKit, battery-whitelist absent) — [closeout](closeouts/2026-05-06-architecture.md)
+- 2026-05-06 — contracts — pinned user-visible contracts for the 4 focus subsystems; 14 black-box acceptance scenarios; 3 new carry_forward routed to protocols (proot argv, AI tool-call JSON, settings export JSON) — [closeout](closeouts/2026-05-06-contracts.md)

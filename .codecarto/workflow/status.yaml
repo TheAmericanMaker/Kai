@@ -1,56 +1,67 @@
 project_name: "Kai"
-# source_location is defined in the active pipeline YAML. Do not duplicate it here.
 pipeline: workflow/pipeline.yaml
-# ^^^ Switched from the default deep-audit (7-phase) to the 5-phase pipeline.yaml so the
-# architecture and contracts phases can run back-to-back without an intervening
-# defect-scan-mechanical phase. Other phases removed accordingly (no defect-scan-*).
-current_phase: contracts  # Set to "complete" when all phases are done.
+current_phase: protocols
 last_updated: "2026-05-06"
 phases:
   architecture:
     status: complete
     owner_notes:
-      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web — plus the iOS Xcode shell). 3 Gradle modules (`:composeApp`, `:androidApp`, `:screenshotTests`) and one out-of-tree iOS shell (`iosApp/`).
+      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web — plus the iOS Xcode shell). 3 Gradle modules and one out-of-tree iOS shell.
       - Two surprise findings worth pinning in contracts — SAF binds are delegated to the FileKit library (no direct SAF code), and the project deliberately does NOT request battery whitelist (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` absent), relying on `START_STICKY` + `MainActivity.onStart()` re-assertion to mitigate OEM kills.
-      - Linux sandbox is Android-only by design; every other target ships `NoOpSandboxController`. The native proot+talloc binaries are cross-compiled by `build-proot.sh` from termux/proot @ pinned commit, output to `androidApp/src/main/jniLibs/`.
+      - Linux sandbox is Android-only by design; every other target ships `NoOpSandboxController`.
     outputs_present:
       - findings/architecture/architecture-map.md
     open_questions:
       - id: arch-OQ1
         kind: needs-runtime-test
-        description: Does `LinuxSandboxManager.makeWritable()` recurse symlinks? Source comment says "walkTopDown"; would need a runtime test on a rootfs with a symlink-to-directory to confirm.
+        description: "`LinuxSandboxManager.makeWritable()` symlink behavior."
         deferred_reason: Not load-bearing for the architecture map; relevant to defect-scan if that pipeline runs later.
       - id: arch-OQ2
         kind: needs-maintainer-decision
-        description: The `:screenshotTests` module's local-vs-CI runnability is unclear from the Gradle config alone.
-        deferred_reason: Not load-bearing for porting; relevant only if a port wants to mirror the test surface.
-    carry_forward:
-      - id: kai-CF-alpine-proot
-        kind: defer-to-phase
-        target_phase: contracts
-        description: Alpine/proot user-visible setup contract — pin success/failure surface, retry semantics, recoverable vs unrecoverable error during setup, and the contract for chooses-no-internet vs all-mirrors-fail.
-        deferred_reason: User-facing setup behavior is the contracts phase's rubric.
-      - id: kai-CF-foreground-service
-        kind: defer-to-phase
-        target_phase: contracts
-        description: Daemon foreground service — pin notification visibility (the persistent low-importance "Kai daemon running" notification), OS-kill recovery contract (START_STICKY semantics + MainActivity.onStart re-assertion), behavior under Android 14+ FGS time limits (`onTimeout` clean-stop), behavior when `ForegroundServiceStartNotAllowedException` fires (silent swallow).
-        deferred_reason: Lifecycle contract is observable user-facing behavior.
-      - id: kai-CF-saf-binds
-        kind: defer-to-phase
-        target_phase: contracts
-        description: SAF binds — pin (a) the FileKit-mediated picker contract on Android (delegated, not direct SAF), (b) the FileProvider outbound-sharing contract for sandbox files via `Intent.ACTION_VIEW`, (c) the deliberate **absence** of persistent SAF grants (no `takePersistableUriPermission` cache).
-        deferred_reason: Permission-flow + persistability semantics are user-visible contracts.
-      - id: kai-CF-battery-whitelist
-        kind: defer-to-phase
-        target_phase: contracts
-        description: Battery whitelist — pin the **deliberate non-request** decision and the resulting user-visible behavior under stock Doze (mostly survives) and aggressive OEM power management (MIUI/EMUI/Huawei may kill the FGS, recovered via re-assertion next foreground). No `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is requested.
-        deferred_reason: The "no request" decision plus the FGS-layer mitigation is itself the user-visible contract — the contracts phase pins what the user observes and how heartbeat misses surface.
+        description: "`:screenshotTests` local-vs-CI runnability is unclear from Gradle config alone."
+        deferred_reason: Not load-bearing for porting.
+    carry_forward: []  # closed by contracts phase
   contracts:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
-    carry_forward: []
+    status: complete
+    owner_notes:
+      - Pinned user-visible behavior across Compose UI surfaces and gave each focus subsystem a full feature-contract table. All four architecture-routed carry_forward entries are explicitly closed in §Carry-Forward Closure of behavioral-contracts.md.
+      - Two deliberate non-features pinned as first-class contracts — no persistent SAF grants and no battery-whitelist request; mitigation lives in the FGS layer.
+      - Wire-format detail intentionally deferred to protocols via three new carry_forward entries.
+    outputs_present:
+      - findings/contracts/behavioral-contracts.md
+    open_questions:
+      - id: ctr-OQ1
+        kind: needs-runtime-test
+        description: Exact default values for daemon-enabled, heartbeat interval, default LLM provider.
+        deferred_reason: Pinned in `AppSettings` defaults; not extracted in this phase.
+      - id: ctr-OQ2
+        kind: needs-spec-ruling
+        description: Settings-import partial-parse failure UX.
+        deferred_reason: Not extracted from source in this phase.
+      - id: ctr-OQ3
+        kind: needs-runtime-test
+        description: Encrypted local storage — algorithm, key derivation, key location.
+        deferred_reason: Relevant to a future defect-scan-semantic if security depth is needed.
+      - id: ctr-OQ4
+        kind: needs-maintainer-decision
+        description: Whether the "no battery whitelist request" decision is documented user-facing.
+        deferred_reason: Possible UX gap.
+    carry_forward:
+      - id: ctr-CF1
+        kind: defer-to-phase
+        target_phase: protocols
+        description: proot argv shape, env vars, working-directory normalisation.
+        deferred_reason: Wire-format extraction is the protocols phase's rubric.
+      - id: ctr-CF2
+        kind: defer-to-phase
+        target_phase: protocols
+        description: AI tool-call JSON schema (tool-call, tool-result, error shape, retry semantics).
+        deferred_reason: Wire-format extraction is the protocols phase.
+      - id: ctr-CF3
+        kind: defer-to-phase
+        target_phase: protocols
+        description: Settings export JSON schema — field names, version field, migration policy.
+        deferred_reason: Wire-format extraction is the protocols phase.
   protocols:
     status: pending
     owner_notes: []
@@ -70,5 +81,5 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run the contracts phase per pipeline.yaml. Required reads — GUIDE.md, this status.yaml, findings/architecture/architecture-map.md. Output — findings/contracts/behavioral-contracts.md.
-  - Each of the 4 focus carry_forward entries (kai-CF-alpine-proot, kai-CF-foreground-service, kai-CF-saf-binds, kai-CF-battery-whitelist) must appear as a clearly-labelled subsection of behavioral-contracts.md, with the standard contract fields (trigger / defaults / outputs / side effects / persisted state / error behavior / recovery behavior).
+  - Run the protocols phase per pipeline.yaml. Required reads — GUIDE.md, status.yaml, findings/architecture/architecture-map.md.
+  - Pick up the three contracts→protocols carry_forward entries (ctr-CF1, ctr-CF2, ctr-CF3) and either resolve in protocols-and-state.md or re-route.
