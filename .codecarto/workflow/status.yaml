@@ -1,44 +1,27 @@
 project_name: "Kai"
 pipeline: workflow/pipeline-full-with-deep-audit.yaml
-current_phase: porting
+current_phase: reimplementation-spec
 last_updated: "2026-05-06"
 phases:
-  architecture:
-    status: complete
-    outputs_present: [findings/architecture/architecture-map.md]
-    open_questions: []
-    carry_forward: []
-  defect-scan-mechanical:
-    status: complete
-    outputs_present: [findings/defect-scan-mechanical/mechanical-defects.md]
-    open_questions: []
-    carry_forward: []  # closed by defect-scan-semantic
-  contracts:
-    status: complete
-    outputs_present: [findings/contracts/behavioral-contracts.md]
-    open_questions: []
-    carry_forward: []  # closed by protocols
-  protocols:
-    status: complete
-    outputs_present: [findings/protocols/protocols-and-state.md]
-    open_questions: []
-    carry_forward:
-      - {id: proto-CF3, kind: defer-to-phase, target_phase: porting, description: "Add `_schema_version` to settings export.", deferred_reason: "Architectural recommendation."}
-  defect-scan-semantic:
+  architecture: {status: complete, outputs_present: [findings/architecture/architecture-map.md], open_questions: [], carry_forward: []}
+  defect-scan-mechanical: {status: complete, outputs_present: [findings/defect-scan-mechanical/mechanical-defects.md], open_questions: [], carry_forward: []}
+  contracts: {status: complete, outputs_present: [findings/contracts/behavioral-contracts.md], open_questions: [], carry_forward: []}
+  protocols: {status: complete, outputs_present: [findings/protocols/protocols-and-state.md], open_questions: [], carry_forward: []}
+  defect-scan-semantic: {status: complete, outputs_present: [findings/defect-scan-semantic/semantic-defects.md], open_questions: [], carry_forward: []}
+  porting:
     status: complete
     owner_notes:
-      - 18 findings— 4 HIGH (security), 7 medium, 7 low. The four HIGH findings are all in Pass 4 (security)— (a) `cleartextTrafficPermitted=true` globally; (b) desktop encryption key in plaintext file; (c) API keys + email passwords exported in cleartext; (d) notification content forwarded to cloud LLMs without per-app gating.
-      - All 5 inherited carry_forward items (mech-CF1/2/3, proto-CF1/2) closed.
-      - Pass 5 findings include cross-platform timeout-cap drift (desktop 120s vs Android 180s) and the no-`_schema_version` settings-export drift.
-    outputs_present: [findings/defect-scan-semantic/semantic-defects.md]
-    open_questions: []
-    carry_forward: []
-  porting:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
-    carry_forward: []
+      - Synthesised architecture/contracts/protocols + 16 mechanical defects + 18 semantic defects = 34 total. Triaged into 8 fix-before-porting (all 4 HIGH-security + 4 mediums) / 13 port-differently / 10 leave-behind.
+      - Routed two carry_forward items to reimplementation-spec— (a) port-CF1 the four HIGH-security cluster needs explicit spec treatment; (b) port-CF2 the Android-only-sandbox asymmetry needs re-affirm-or-redesign decision.
+      - Closed proto-CF3 (no `_schema_version` in settings export) by surfacing it as a porting recommendation.
+    outputs_present: [findings/porting/reverse-engineering-bundle.md]
+    open_questions:
+      - {id: port-OQ1, kind: needs-runtime-test, description: "Heartbeat-with-on-device-only-LLM doesn't leak notification content?", deferred_reason: "Runtime test needed."}
+      - {id: port-OQ2, kind: needs-source-extraction, description: "Conversation-record on-disk format.", deferred_reason: "Not extracted."}
+      - {id: port-OQ3, kind: needs-maintainer-decision, description: "Is porting also a UX migration around the security cluster?", deferred_reason: "Strategic-alignment hook for reimpl-spec."}
+    carry_forward:
+      - {id: port-CF1, kind: defer-to-phase, target_phase: reimplementation-spec, description: "Four-HIGH security cluster (4.1/4.2/4.3/4.4) needs explicit spec treatment.", deferred_reason: "Strategic-alignment decision."}
+      - {id: port-CF2, kind: defer-to-phase, target_phase: reimplementation-spec, description: "Android-only-sandbox asymmetry— re-affirm or redesign.", deferred_reason: "Spec-level decision."}
   reimplementation-spec:
     status: pending
     owner_notes: []
@@ -46,5 +29,4 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run porting phase— synthesise architecture/contracts/protocols/defect-scans into reverse-engineering-bundle.md. Pick up proto-CF3 (add _schema_version).
-  - After porting, honor the Strategic Alignment Hook in GUIDE.md before reimplementation-spec.
+  - Reimplementation-spec phase. Honor the Strategic Alignment Hook in GUIDE.md— ASK USER opinionated vs language-agnostic before producing the spec. Pick up port-CF1, port-CF2.
