@@ -1,79 +1,54 @@
 project_name: "Kai"
 pipeline: workflow/pipeline-full-with-deep-audit.yaml
-# ^^^ Switched back to the 7-phase deep-audit pipeline at the user's request after running
-# architecture and contracts under the 5-phase pipeline.yaml.
-# Phase order: architecture → defect-scan-mechanical → contracts → protocols → defect-scan-semantic → porting → reimplementation-spec.
-# Architecture and contracts are already complete; the remaining 5 phases run sequentially in this session.
-# Note: contracts in deep-audit lists `findings/defect-scan-mechanical/mechanical-defects.md` as a required_read; contracts was completed BEFORE defect-scan-mechanical (under pipeline.yaml). The contracts output is accepted as-is; any contract-affecting defects defect-scan-mechanical surfaces should be routed to a contracts-revision via carry_forward, OR captured in the porting phase's Defect Synthesis with porting recommendations.
-current_phase: defect-scan-mechanical
+current_phase: protocols
 last_updated: "2026-05-06"
 phases:
   architecture:
     status: complete
-    owner_notes:
-      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web).
-      - SAF binds delegated to FileKit (no direct SAF code); battery whitelist deliberately not requested (mitigation in FGS layer).
-      - Linux sandbox is Android-only by design.
     outputs_present:
       - findings/architecture/architecture-map.md
     open_questions:
-      - id: arch-OQ1
-        kind: needs-runtime-test
-        description: "`LinuxSandboxManager.makeWritable()` symlink behavior."
-        deferred_reason: Not load-bearing for the architecture map.
-      - id: arch-OQ2
-        kind: needs-maintainer-decision
-        description: "`:screenshotTests` local-vs-CI runnability is unclear from Gradle config alone."
-        deferred_reason: Not load-bearing for porting.
+      - {id: arch-OQ1, kind: needs-runtime-test, description: "`LinuxSandboxManager.makeWritable()` symlink behavior.", deferred_reason: "Not load-bearing."}
+      - {id: arch-OQ2, kind: needs-maintainer-decision, description: "`:screenshotTests` local-vs-CI runnability.", deferred_reason: "Not load-bearing for porting."}
     carry_forward: []
   defect-scan-mechanical:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
-    carry_forward: []
-  contracts:
     status: complete
     owner_notes:
-      - Pinned user-visible behavior across Compose UI surfaces and gave each focus subsystem a full feature-contract table.
-      - Two deliberate non-features pinned as first-class contracts (no persistent SAF grants; no battery-whitelist request).
-      - Wire-format detail intentionally deferred to protocols via three new carry_forward entries.
-      - NOTE— contracts was completed under workflow/pipeline.yaml BEFORE defect-scan-mechanical. Under deep-audit, contracts has defect-scan-mechanical as a required_read; this divergence is documented in the next-phase planning. defect-scan-mechanical's findings affecting contracts (if any) will be referenced in porting's Defect Synthesis.
+      - 16 findings total— 3 logic / 7 error-handling / 6 config. 4 medium, 12 low. No criticals or highs. Codebase shows generally good defensive discipline.
+      - Top medium findings— (a) `runBlocking { getString(...) }` in HeartbeatNotifier and NotificationHelper notification paths (main-thread stall risk); (b) three sources of truth for sandbox output/timeout limits (ProotExecutor vs PersistentSandboxShell vs desktop ShellCommandTool); (c) silent symlink-failure in tar extract; (d) `LinuxSandboxManager.homePath` ignores mkdirs() failure.
+      - 3 items routed to defect-scan-semantic via carry_forward (mech-CF1/2/3) for concurrency / state-machine angle.
+    outputs_present:
+      - findings/defect-scan-mechanical/mechanical-defects.md
+    open_questions: []
+    carry_forward:
+      - id: mech-CF1
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "`runBlocking { getString(...) }` in HeartbeatNotifier (lines 65-66) and NotificationHelper init {} (lines 33-34)— concurrency dimension. Pass 3 should characterise the calling-dispatcher contract."
+        deferred_reason: Concurrency analysis needs contracts/protocols context.
+      - id: mech-CF2
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "`MainActivity.handleDeepLinkIntent` (115-122) Intent-mutation dedup robustness under configuration changes. Pass 5 (API contract violations) angle."
+        deferred_reason: Needs the contracts output to characterise the heartbeat-dedup contract.
+      - id: mech-CF3
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "Multiple `scope.launch { ... _state.value = ... }` blocks in LinuxSandboxManager— concurrent state writes; check for missing serialisation guard. Pass 3 (concurrency)."
+        deferred_reason: Pass 3 angle.
+  contracts:
+    status: complete
     outputs_present:
       - findings/contracts/behavioral-contracts.md
     open_questions:
-      - id: ctr-OQ1
-        kind: needs-runtime-test
-        description: Exact default values for daemon-enabled, heartbeat interval, default LLM provider.
-        deferred_reason: Pinned in `AppSettings` defaults; not extracted in this phase.
-      - id: ctr-OQ2
-        kind: needs-spec-ruling
-        description: Settings-import partial-parse failure UX.
-        deferred_reason: Not extracted from source in this phase.
-      - id: ctr-OQ3
-        kind: needs-runtime-test
-        description: Encrypted local storage — algorithm, key derivation, key location.
-        deferred_reason: Relevant to defect-scan-semantic.
-      - id: ctr-OQ4
-        kind: needs-maintainer-decision
-        description: Whether the "no battery whitelist request" decision is documented user-facing.
-        deferred_reason: Possible UX gap.
+      - {id: ctr-OQ1, kind: needs-runtime-test, description: "Default values for daemon-enabled / heartbeat interval / default LLM provider.", deferred_reason: "Pinned in `AppSettings`."}
+      - {id: ctr-OQ2, kind: needs-spec-ruling, description: "Settings-import partial-parse failure UX.", deferred_reason: "Not extracted."}
+      - {id: ctr-OQ3, kind: needs-runtime-test, description: "Encrypted local storage— algorithm, key derivation, key location.", deferred_reason: "Relevant to defect-scan-semantic."}
+      - {id: ctr-OQ4, kind: needs-maintainer-decision, description: "\"No battery whitelist request\" decision— documented user-facing?", deferred_reason: "Possible UX gap."}
     carry_forward:
-      - id: ctr-CF1
-        kind: defer-to-phase
-        target_phase: protocols
-        description: proot argv shape, env vars, working-directory normalisation.
-        deferred_reason: Wire-format extraction is the protocols phase's rubric.
-      - id: ctr-CF2
-        kind: defer-to-phase
-        target_phase: protocols
-        description: AI tool-call JSON schema (tool-call, tool-result, error shape, retry semantics).
-        deferred_reason: Wire-format extraction is the protocols phase.
-      - id: ctr-CF3
-        kind: defer-to-phase
-        target_phase: protocols
-        description: Settings export JSON schema — field names, version field, migration policy.
-        deferred_reason: Wire-format extraction is the protocols phase.
+      - {id: ctr-CF1, kind: defer-to-phase, target_phase: protocols, description: "proot argv shape, env vars, working-dir normalisation.", deferred_reason: "Wire-format extraction."}
+      - {id: ctr-CF2, kind: defer-to-phase, target_phase: protocols, description: "AI tool-call JSON schema (tool-call, tool-result, error shape, retry semantics).", deferred_reason: "Wire-format extraction."}
+      - {id: ctr-CF3, kind: defer-to-phase, target_phase: protocols, description: "Settings export JSON schema— field names, version field, migration policy.", deferred_reason: "Wire-format extraction."}
   protocols:
     status: pending
     owner_notes: []
@@ -99,6 +74,5 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run defect-scan-mechanical (passes 1/2/6 — logic, error handling, config). Output— findings/defect-scan-mechanical/mechanical-defects.md.
-  - Then run protocols, defect-scan-semantic, porting, reimplementation-spec sequentially per pipeline-full-with-deep-audit.yaml's phase_order.
-  - Before reimplementation-spec— honor the Strategic Alignment Hook in GUIDE.md (opinionated vs language-agnostic).
+  - Run protocols phase— read architecture-map.md + behavioral-contracts.md + mechanical-defects.md; output findings/protocols/protocols-and-state.md.
+  - Pick up the three contracts→protocols carry_forward entries (ctr-CF1/2/3)— wire-format detail.
