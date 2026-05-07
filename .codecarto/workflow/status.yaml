@@ -1,32 +1,44 @@
 project_name: "Kai"
-pipeline: workflow/pipeline.yaml
-current_phase: protocols
+pipeline: workflow/pipeline-full-with-deep-audit.yaml
+# ^^^ Switched back to the 7-phase deep-audit pipeline at the user's request after running
+# architecture and contracts under the 5-phase pipeline.yaml.
+# Phase order: architecture → defect-scan-mechanical → contracts → protocols → defect-scan-semantic → porting → reimplementation-spec.
+# Architecture and contracts are already complete; the remaining 5 phases run sequentially in this session.
+# Note: contracts in deep-audit lists `findings/defect-scan-mechanical/mechanical-defects.md` as a required_read; contracts was completed BEFORE defect-scan-mechanical (under pipeline.yaml). The contracts output is accepted as-is; any contract-affecting defects defect-scan-mechanical surfaces should be routed to a contracts-revision via carry_forward, OR captured in the porting phase's Defect Synthesis with porting recommendations.
+current_phase: defect-scan-mechanical
 last_updated: "2026-05-06"
 phases:
   architecture:
     status: complete
     owner_notes:
-      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web — plus the iOS Xcode shell). 3 Gradle modules and one out-of-tree iOS shell.
-      - Two surprise findings worth pinning in contracts — SAF binds are delegated to the FileKit library (no direct SAF code), and the project deliberately does NOT request battery whitelist (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` absent), relying on `START_STICKY` + `MainActivity.onStart()` re-assertion to mitigate OEM kills.
-      - Linux sandbox is Android-only by design; every other target ships `NoOpSandboxController`.
+      - Mapped a Kotlin Multiplatform / Compose Multiplatform application across 5 targets (Android, iOS, JVM Desktop, WASM Web).
+      - SAF binds delegated to FileKit (no direct SAF code); battery whitelist deliberately not requested (mitigation in FGS layer).
+      - Linux sandbox is Android-only by design.
     outputs_present:
       - findings/architecture/architecture-map.md
     open_questions:
       - id: arch-OQ1
         kind: needs-runtime-test
         description: "`LinuxSandboxManager.makeWritable()` symlink behavior."
-        deferred_reason: Not load-bearing for the architecture map; relevant to defect-scan if that pipeline runs later.
+        deferred_reason: Not load-bearing for the architecture map.
       - id: arch-OQ2
         kind: needs-maintainer-decision
         description: "`:screenshotTests` local-vs-CI runnability is unclear from Gradle config alone."
         deferred_reason: Not load-bearing for porting.
-    carry_forward: []  # closed by contracts phase
+    carry_forward: []
+  defect-scan-mechanical:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
   contracts:
     status: complete
     owner_notes:
-      - Pinned user-visible behavior across Compose UI surfaces and gave each focus subsystem a full feature-contract table. All four architecture-routed carry_forward entries are explicitly closed in §Carry-Forward Closure of behavioral-contracts.md.
-      - Two deliberate non-features pinned as first-class contracts — no persistent SAF grants and no battery-whitelist request; mitigation lives in the FGS layer.
+      - Pinned user-visible behavior across Compose UI surfaces and gave each focus subsystem a full feature-contract table.
+      - Two deliberate non-features pinned as first-class contracts (no persistent SAF grants; no battery-whitelist request).
       - Wire-format detail intentionally deferred to protocols via three new carry_forward entries.
+      - NOTE— contracts was completed under workflow/pipeline.yaml BEFORE defect-scan-mechanical. Under deep-audit, contracts has defect-scan-mechanical as a required_read; this divergence is documented in the next-phase planning. defect-scan-mechanical's findings affecting contracts (if any) will be referenced in porting's Defect Synthesis.
     outputs_present:
       - findings/contracts/behavioral-contracts.md
     open_questions:
@@ -41,7 +53,7 @@ phases:
       - id: ctr-OQ3
         kind: needs-runtime-test
         description: Encrypted local storage — algorithm, key derivation, key location.
-        deferred_reason: Relevant to a future defect-scan-semantic if security depth is needed.
+        deferred_reason: Relevant to defect-scan-semantic.
       - id: ctr-OQ4
         kind: needs-maintainer-decision
         description: Whether the "no battery whitelist request" decision is documented user-facing.
@@ -68,6 +80,12 @@ phases:
     outputs_present: []
     open_questions: []
     carry_forward: []
+  defect-scan-semantic:
+    status: pending
+    owner_notes: []
+    outputs_present: []
+    open_questions: []
+    carry_forward: []
   porting:
     status: pending
     owner_notes: []
@@ -81,5 +99,6 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run the protocols phase per pipeline.yaml. Required reads — GUIDE.md, status.yaml, findings/architecture/architecture-map.md.
-  - Pick up the three contracts→protocols carry_forward entries (ctr-CF1, ctr-CF2, ctr-CF3) and either resolve in protocols-and-state.md or re-route.
+  - Run defect-scan-mechanical (passes 1/2/6 — logic, error handling, config). Output— findings/defect-scan-mechanical/mechanical-defects.md.
+  - Then run protocols, defect-scan-semantic, porting, reimplementation-spec sequentially per pipeline-full-with-deep-audit.yaml's phase_order.
+  - Before reimplementation-spec— honor the Strategic Alignment Hook in GUIDE.md (opinionated vs language-agnostic).
